@@ -1,0 +1,176 @@
+--CREATING DATABASE
+create database boat_earphones;
+use boat_earphones;
+
+--CREATING TABLE
+create table earphones_details(id integer primary key, name varchar(1000),
+price float,old_price float);
+
+create table earphones_ratings(rating_id integer primary key, ratings float,
+no_of_ratings float);
+
+create table earphones_delivery(delivery_id integer primary key,free_delivery varchar(100));
+
+SELECT * FROM earphones_delivery;
+-- NORMALISATION
+create table earphones_ratings1 as 
+with table1 as (select rating_id, ratings, no_of_ratings,
+row_number() over(partition by no_of_ratings order by no_of_ratings)
+earphones_rank from earphones_ratings)
+select row_number() over(order by no_of_ratings) as unique_id, rating_id 
+from table1 where earphones_rank=1;
+ 
+-- FINAL TABLE
+create table earphones_boat as
+select r.unique_id, d.name, d.price, d.old_price, r.ratings, r.no_of_ratings, 
+de.free_delivery from earphones_ratings1 r inner join  earphones_details d
+on r.rating_id= d.id inner join earphones_delivery de on de.delivery_id= d.id;
+ 
+select * from earphones_boat;
+
+
+-- TRIGGERS
+
+create table earphones_audit
+(unique_id int not null primary key, name varchar(1000), price float, old_price float,
+ratings float, no_of_ratings float, free_delivery varchar(100), changedat DATETIME DEFAULT NULL,
+action varchar(100) DEFAULT NULL);
+
+create trigger after_earphones_boat_insert after insert on earphones_boat for each row
+insert into earphones_audit
+set action= 'insert',
+unique_id= NEW.unique_id, name= NEW.name, price= NEW.price, old_price= NEW.old_price,
+ratings= NEW.ratings, no_of_ratings= NEW.no_of_ratings, free_delivery= NEW.free_delivery
+, changedat = NOW();
+
+
+INSERT into earphones_boat(unique_id, name, price, old_price, ratings,
+no_of_ratings, free_delivery)
+values(24, 'boAt NIRVANAA 1007ANC Wireless Bluetooth Over The Ear Headphone with Mic (Midnight Blue)',
+14398, 19990, 3.3, 123, 'yes'),
+(25,'(Renewed) Boat NIRVANAA 1007ANC Active Noise Cancelling Headphones with SmartWave Technology, Up to 30H Playback,Ambient Sound Mode,Smart Mute,Type C Interface,Carry Case,One Click Battery Level (Midnight Blue)',
+6999, 14398, 2.7, 2, 'yes'),
+(26,'boAt NIRVANAA 751ANC Hybrid Active Noise Cancelling Over-Ear Headphones with Up to 65H Playtime, ASAP™ Charge, Ambient Sound Mode, Immersive Sound, Dual Compatibility, Carry Pouch(Bold Blue)',
+3999, 7990, 3.9, 114, 'yes'),
+(27,'boAt Airdopes 501 ANC Truly Wireless Bluetooth in Ear Earbuds with Mic (Black)',
+3990, 9990, 3.2, 422, 'yes'),
+(28,'boAt Rockerz 600 Mumbai Indians Edition Bluetooth Headphone with Luxurious Sound, Plush Earcushions, Foldable Ergonomic Design and Up to 8H Playtime (Blue)',
+3886, 4990, 4.2, 129, 'yes'),
+(29,'boAt NIRVANAA 751ANC Hybrid Active Noise Cancelling Over-Ear Headphones with Up to 65H Playtime, ASAP™ Charge, Ambient Sound Mode, Immersive Sound, Dual Compatibility, Carry Pouch(Gunmetal Grey)',
+3499, 7990, 3.9, 114, 'yes'),
+(30, 'boAt Immortal IM-700 7.1 Channel PC USB Gaming Over-Ear Headphones with 50mm Drivers, Virtual Surround Sound, ENx™ Tech, RGB LEDs, Remote Control, Braided Cable(Black Sabre)',
+2999, 6990, 4.6, 23, 'yes');
+
+show triggers;
+select * from earphones_audit;
+
+select * from earphones_boat;
+
+-- CREATING TABLE WITH COLUMNS rank_by_rating & discount_percentage
+create table earphones_boat_new as 
+select unique_id, dense_rank() over (order by ratings desc, no_of_ratings desc) rank_by_rating,
+name, price, old_price, CONCAT(ROUND((old_price-price)*100/old_price,0),'%')
+as discount_percentage, ratings, no_of_ratings, free_delivery from earphones_boat order by unique_id;
+
+
+-- CREATING VIEW
+create view earphones_boat_rank_by_rating_view as 
+select unique_id, dense_rank() over (order by ratings desc, no_of_ratings desc) rank_by_rating,
+name, price, old_price, ratings, no_of_ratings, free_delivery from earphones_boat;
+
+create view earphones_boat_discount_view as 
+select unique_id, name, price, old_price, CONCAT(ROUND((old_price-price)*100/old_price,0),'%')
+as discount_percentage, ratings, no_of_ratings, free_delivery from earphones_boat;
+
+create view earphones_boat_free_delivery_view as 
+select unique_id, name, price, old_price, ratings, no_of_ratings, free_delivery
+from earphones_boat where free_delivery = 'yes';
+
+create view earphones_boat_paid_delivery_view as 
+select unique_id, name, price, old_price, ratings, no_of_ratings, free_delivery
+from earphones_boat where free_delivery = 'no';
+
+create view earphones_boat_more_than_4_rating_view as 
+select unique_id, name, price, old_price, ratings, no_of_ratings, free_delivery
+from earphones_boat where ratings>4;
+
+select * from earphones_boat_free_delivery_view;
+
+
+-- CREATING INDEX
+create index ind on earphones_boat(unique_id);
+
+
+-- CREATING STORED PROCEDURES FROM TABLE
+
+DELIMITER $$
+
+CREATE PROCEDURE GetAllBoatEarphones()
+BEGIN
+select r.unique_id, d.name, d.price, d.old_price, r.rating_id, r.ratings, r.no_of_ratings, 
+de.free_delivery from earphones_ratings1 r inner join  earphones_details d
+on r.rating_id= d.id inner join earphones_delivery de on de.delivery_id= d.id;    
+END$$
+DELIMITER ;
+
+call GetAllBoatEarphones();
+
+-- DELIMITER ||
+
+-- CREATE PROCEDURE GetEarphonesByRating(IN rating float)
+-- BEGIN
+-- select * from earphones_boat_new where ratings= rating;
+-- END|| 
+
+-- DELIMITER;
+
+
+call GetEarphonesByRating(3.6);
+
+
+-- CREATING STORED PROCEDURES FROM VIEW
+DELIMITER //
+
+CREATE PROCEDURE GetEarphonesByRankByRating(IN earphones_rank int)
+BEGIN
+	SELECT * 
+ 	FROM earphones_boat_rank_by_rating_view
+	WHERE rank_by_rating = earphones_rank;
+END //
+
+DELIMITER ;
+
+call GetEarphonesByRankByRating(10);
+
+select * from earphones_boat_new;
+select * from earphones_boat_new ORDER BY rank_by_rating limit 5;
+##top 5 earphones by rating
+##in range 1000
+##earphone,headset, earbuds
+## 5 best cheapest earphones
+select * from earphones_boat_new where name like '%Earphones%' ORDER BY price,rank_by_rating, no_of_ratings desc
+limit 5;
+##best cheapest headset
+select * from earphones_boat_new where name like '%Headset%' ORDER BY price,rank_by_rating, no_of_ratings desc
+limit 5;
+## 5 best cheapest earbuds
+select * from earphones_boat_new where name like '%Earbuds%' ORDER BY price,rank_by_rating, no_of_ratings desc
+limit 5;
+
+
+## earphones with high discounts to low discounts
+select * from earphones_boat_new ORDER BY discount_percentage desc;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
